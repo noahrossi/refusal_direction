@@ -19,6 +19,8 @@ def parse_arguments():
     """Parse model path argument from command line."""
     parser = argparse.ArgumentParser(description="Parse model path argument.")
     parser.add_argument('--model_path', type=str, required=True, help='Path to the model')
+    parser.add_argument('--last_token_only', action='store_true',
+                        help='Only extract directions at the last prompt token (pos=-1)')
     return parser.parse_args()
 
 def load_and_sample_datasets(cfg):
@@ -59,7 +61,7 @@ def filter_data(cfg, model_base, harmful_train, harmless_train, harmful_val, har
     
     return harmful_train, harmless_train, harmful_val, harmless_val
 
-def generate_and_save_candidate_directions(cfg, model_base, harmful_train, harmless_train):
+def generate_and_save_candidate_directions(cfg, model_base, harmful_train, harmless_train, positions=None):
     """Generate and save candidate directions."""
     if not os.path.exists(os.path.join(cfg.artifact_path(), 'generate_directions')):
         os.makedirs(os.path.join(cfg.artifact_path(), 'generate_directions'))
@@ -68,7 +70,8 @@ def generate_and_save_candidate_directions(cfg, model_base, harmful_train, harml
         model_base,
         harmful_train,
         harmless_train,
-        artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"))
+        artifact_dir=os.path.join(cfg.artifact_path(), "generate_directions"),
+        positions=positions)
 
     torch.save(mean_diffs, os.path.join(cfg.artifact_path(), 'generate_directions/mean_diffs.pt'))
 
@@ -133,7 +136,7 @@ def evaluate_loss_for_datasets(cfg, model_base, fwd_pre_hooks, fwd_hooks, interv
     with open(f'{cfg.artifact_path()}/loss_evals/{intervention_label}_loss_eval.json', "w") as f:
         json.dump(loss_evals, f, indent=4)
 
-def run_pipeline(model_path):
+def run_pipeline(model_path, last_token_only=False):
     """Run the full pipeline."""
     model_alias = os.path.basename(model_path)
     cfg = Config(model_alias=model_alias, model_path=model_path)
@@ -142,12 +145,14 @@ def run_pipeline(model_path):
 
     # Load and sample datasets
     harmful_train, harmless_train, harmful_val, harmless_val = load_and_sample_datasets(cfg)
-    
+
     # Filter datasets based on refusal scores
     harmful_train, harmless_train, harmful_val, harmless_val = filter_data(cfg, model_base, harmful_train, harmless_train, harmful_val, harmless_val)
 
+    positions = [-1] if last_token_only else None
+
     # 1. Generate candidate refusal directions
-    candidate_directions = generate_and_save_candidate_directions(cfg, model_base, harmful_train, harmless_train)
+    candidate_directions = generate_and_save_candidate_directions(cfg, model_base, harmful_train, harmless_train, positions=positions)
     
     # 2. Select the most effective refusal direction
     pos, layer, direction = select_and_save_direction(cfg, model_base, harmful_val, harmless_val, candidate_directions)
@@ -187,4 +192,4 @@ def run_pipeline(model_path):
 
 if __name__ == "__main__":
     args = parse_arguments()
-    run_pipeline(model_path=args.model_path)
+    run_pipeline(model_path=args.model_path, last_token_only=args.last_token_only)
