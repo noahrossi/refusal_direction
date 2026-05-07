@@ -193,7 +193,7 @@ def select_direction(
     plot_refusal_scores(
         refusal_scores=ablation_refusal_scores,
         baseline_refusal_score=baseline_refusal_scores_harmful.mean().item(),
-        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        token_labels=[model_base.tokenizer.decode([t]) for t in model_base.eoi_toks],
         title='Ablating direction on harmful instructions',
         artifact_dir=artifact_dir,
         artifact_name='ablation_scores'
@@ -202,7 +202,7 @@ def select_direction(
     plot_refusal_scores(
         refusal_scores=steering_refusal_scores,
         baseline_refusal_score=baseline_refusal_scores_harmless.mean().item(),
-        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        token_labels=[model_base.tokenizer.decode([t]) for t in model_base.eoi_toks],
         title='Adding direction on harmless instructions',
         artifact_dir=artifact_dir,
         artifact_name='actadd_scores'
@@ -211,7 +211,7 @@ def select_direction(
     plot_refusal_scores(
         refusal_scores=ablation_kl_div_scores,
         baseline_refusal_score=0.0,
-        token_labels=model_base.tokenizer.batch_decode(model_base.eoi_toks),
+        token_labels=[model_base.tokenizer.decode([t]) for t in model_base.eoi_toks],
         title='KL Divergence when ablating direction on harmless instructions',
         artifact_dir=artifact_dir,
         artifact_name='kl_div_scores'

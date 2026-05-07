@@ -82,12 +82,22 @@ def select_and_save_direction(cfg, model_base, harmful_val, harmless_val, candid
     if not os.path.exists(os.path.join(cfg.artifact_path(), 'select_direction')):
         os.makedirs(os.path.join(cfg.artifact_path(), 'select_direction'))
 
+    # Gemma 4's harmless-prompt KL after any non-trivial direction-ablation is
+    # ~13 nats (the forced <|channel>thought<channel|> prefix gives the model a
+    # lot of latitude in what comes next, so any real intervention shifts the
+    # distribution by a lot). The default kl_threshold=0.1 filters every
+    # candidate. Disable the KL filter for this family.
+    kwargs = {}
+    if 'gemma-4' in cfg.model_path.lower():
+        kwargs['kl_threshold'] = None
+
     pos, layer, direction = select_direction(
         model_base,
         harmful_val,
         harmless_val,
         candidate_directions,
-        artifact_dir=os.path.join(cfg.artifact_path(), "select_direction")
+        artifact_dir=os.path.join(cfg.artifact_path(), "select_direction"),
+        **kwargs,
     )
 
     with open(f'{cfg.artifact_path()}/direction_metadata.json', "w") as f:
@@ -140,6 +150,11 @@ def run_pipeline(model_path, last_token_only=False):
     """Run the full pipeline."""
     model_alias = os.path.basename(model_path)
     cfg = Config(model_alias=model_alias, model_path=model_path)
+
+    # llamaguard2 evaluation goes through Together AI; skip it if no key is set.
+    if 'llamaguard2' in cfg.jailbreak_eval_methodologies and not os.environ.get('TOGETHER_API_KEY'):
+        cfg.jailbreak_eval_methodologies = tuple(m for m in cfg.jailbreak_eval_methodologies if m != 'llamaguard2')
+        print("[run_pipeline] TOGETHER_API_KEY not set; dropping 'llamaguard2' from jailbreak_eval_methodologies.")
 
     model_base = construct_model_base(cfg.model_path)
 

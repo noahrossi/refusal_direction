@@ -5,11 +5,12 @@ import gc
 import numpy as np
 
 from transformers import AutoTokenizer
-from vllm import LLM, SamplingParams
-from vllm.distributed.parallel_state import destroy_model_parallel
 import torch
-import litellm
 import time
+
+# vllm and litellm are only needed for the llamaguard2 / harmbench / GPT-judge
+# evaluation paths. They're imported lazily inside the functions that use them
+# so the rest of the pipeline (e.g. substring_matching) runs without them.
 
 # based on https://github.com/JailbreakBench/jailbreakbench/blob/4dbcc097739dd684fbf789cc3d4f97372bd72851/src/jailbreakbench/classifier.py
 # augmented with some additional prefixes
@@ -103,6 +104,7 @@ class LlamaGuard2Classifier:
         returns:
             list of booleans, True if the response is classified as jailbroken and False otherwise
         """
+        import litellm
         classifier_inputs = [
             self._build_classifier_input(prompt, response) for prompt, response in zip(prompts, responses)
         ]
@@ -123,6 +125,7 @@ def substring_matching_judge_fn(completion: str, refusal_substrings: List[str]=_
     return any([refusal_substring.lower() in completion.lower() for refusal_substring in refusal_substrings])
 
 def llamaguard2_judge_fn(prompts: List[str], responses: List[str]) -> List[int]:
+    import litellm  # noqa: F401  # imported for side effects (used by classifier)
     assert os.environ.get("TOGETHER_API_KEY", None) is not None, "TOGETHER_API_KEY environment variable must be set to run jailbreakbench evaluation."
 
     classifier = LlamaGuard2Classifier(os.environ["TOGETHER_API_KEY"])
@@ -147,6 +150,8 @@ def llamaguard2_judge_fn(prompts: List[str], responses: List[str]) -> List[int]:
 
 # taken from https://github.com/centerforaisafety/HarmBench/blob/main/evaluate_completions.py#L65
 def harmbench_judge_fn(prompts: List[str], responses: List[str]) -> List[int]:
+    from vllm import LLM, SamplingParams
+    from vllm.distributed.parallel_state import destroy_model_parallel  # noqa: F401
 
     classifier = LLM(model='cais/HarmBench-Llama-2-13b-cls', tensor_parallel_size=1)
     classifier.llm_engine.tokenizer.truncation_side = "left"
